@@ -93,17 +93,6 @@ const getAllReservations = function(guest_id, limit = 10) {
   .catch(err => {
     console.log(err.message)
   })
-
-
-
-
-  // return pool
-  // .query(`INSERT INTO users (name, email, password)
-  // VALUES ($1, $2, $3) RETURNING *`, [user.name, user.email, user.password])
-  // .then(result => result.rows[0])
-  // .catch(err => {
-  //   console.log(err.message)
-  // })
 }
 exports.getAllReservations = getAllReservations;
 
@@ -116,18 +105,41 @@ exports.getAllReservations = getAllReservations;
  * @return {Promise<[{}]>}  A promise to the properties.
  */
 const getAllProperties = (options, limit = 10) => {
-  return pool
-  .query(`
-  SELECT * FROM properties
-  LIMIT $1
-  `, [limit])
-  .then((result) => {
-    // console.log(result.rows);
-    return result.rows;
-  })
-  .catch((err) => {
-    console.log(err.message)
-  })
+  const queryParams = []; 
+  let queryString = `
+  SELECT properties.*, AVG(property_reviews.rating) as average_rating
+  FROM properties
+  JOIN property_reviews ON properties.id = property_id
+  `; 
+
+  if (options.city) {
+    queryParams.push(`%${options.city.slice(1)}%`);
+    queryString += ` AND city LIKE $${queryParams.length}`;
+  }
+  if (options.owner_id) {
+    queryParams.push(options.owner_id);
+    queryString += ` AND owner_id = ${queryParams.length}`;
+  }
+  if (options.minimum_price_per_night && options.maximum_price_per_night) {
+    queryParams.push(options.minimum_price_per_night * 100);
+    queryString += ` AND cost_per_night >= $${queryParams.length}`;
+    queryParams.push(options.maximum_price_per_night * 100);
+    queryString += ` AND cost_per_night <= $${queryParams.length}`;
+  }
+
+  queryString += ` GROUP BY properties.id`;
+
+  if (options.minimum_rating) {
+    queryParams.push(options.minimum_rating);
+    queryString += ` HAVING AVG(property_reviews.rating) >= $${queryParams.length}`;
+  }
+
+  queryParams.push(limit);
+  queryString += ` 
+  ORDER BY cost_per_night
+  LIMIT $${queryParams.length};
+  `;
+  return pool.query(queryString, queryParams).then((res) => res.rows);
 }
 exports.getAllProperties = getAllProperties;
 
